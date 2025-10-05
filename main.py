@@ -100,13 +100,18 @@ for row in tqdm(crsp_rows, desc='Indexing CRSP names', unit='row'):
     all_candidates.append((norm, comnam))
 
 # Load SE data and attempt matching
-matched_rows = []
+processed_rows = []
+unmatched_rows = []
+unmatched_signatures = set()
 match_count = 0
+unmatched_count = 0
 total_rows = 0
 logger.info('Processing SE mappings for matching...')
 with open('Data/SEmappingsDAFA.csv', newline='', encoding='utf-8') as se_file:
     reader = csv.DictReader(se_file)
-    fieldnames = reader.fieldnames
+    base_fieldnames = reader.fieldnames if reader.fieldnames is not None else []
+    fieldnames = base_fieldnames + ['ExtractedCompanyName', 'NormalizedCompanyName', 'MergeComnam']
+    signature_fields = base_fieldnames + ['NormalizedCompanyName']
     for row in tqdm(reader, desc='Matching SE rows', unit='row'):
         total_rows += 1
         extracted = extract_company_from_headline(row.get('SEHeadline', ''), row.get('SECompanyName', ''))
@@ -155,10 +160,19 @@ with open('Data/SEmappingsDAFA.csv', newline='', encoding='utf-8') as se_file:
                 best_score = scored_candidates[0][0]
             if best_match is not None and best_score >= 0.8:
                 matched_comnam = best_match
+        output_row = dict(row)
+        output_row['ExtractedCompanyName'] = extracted
+        output_row['NormalizedCompanyName'] = normalized
+        output_row['MergeComnam'] = matched_comnam
         if matched_comnam:
             match_count += 1
-        row['MergeComnam'] = matched_comnam
-        matched_rows.append(row)
+        else:
+            unmatched_count += 1
+            signature = tuple(output_row.get(field, '') for field in signature_fields)
+            if signature not in unmatched_signatures:
+                unmatched_signatures.add(signature)
+                unmatched_rows.append(output_row)
+        processed_rows.append(output_row)
 
 # Write results to file
 output_path = 'Data/SEmappingsDAFA_merged.csv'
@@ -166,7 +180,16 @@ logger.info('Writing merged results to %s', output_path)
 with open(output_path, 'w', newline='', encoding='utf-8') as out_file:
     writer = csv.DictWriter(out_file, fieldnames=fieldnames)
     writer.writeheader()
-    writer.writerows(matched_rows)
+    writer.writerows(processed_rows)
+
+# Write unmatched unique rows to a separate file
+unmatched_output_path = 'Data/SEmappingsDAFA_unmatched_unique.csv'
+logger.info('Writing %d unique unmatched rows (from %d unmatched) to %s',
+            len(unmatched_rows), unmatched_count, unmatched_output_path)
+with open(unmatched_output_path, 'w', newline='', encoding='utf-8') as unmatched_file:
+    writer = csv.DictWriter(unmatched_file, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(unmatched_rows)
 
 # Print merge success rate
 if total_rows:
