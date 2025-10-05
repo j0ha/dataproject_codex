@@ -106,6 +106,8 @@ unmatched_signatures = set()
 match_count = 0
 unmatched_count = 0
 total_rows = 0
+exact_match_count = 0
+non_exact_match_count = 0
 logger.info('Processing SE mappings for matching...')
 with open('Data/SEmappingsDAFA.csv', newline='', encoding='utf-8') as se_file:
     reader = csv.DictReader(se_file)
@@ -119,6 +121,7 @@ with open('Data/SEmappingsDAFA.csv', newline='', encoding='utf-8') as se_file:
         matched_comnam = ''
         if normalized in normalized_to_comnam:
             matched_comnam = normalized_to_comnam[normalized][0]
+            exact_match_count += 1
         else:
             candidate_set = set()
             tokens = normalized.split()
@@ -160,6 +163,7 @@ with open('Data/SEmappingsDAFA.csv', newline='', encoding='utf-8') as se_file:
                 best_score = scored_candidates[0][0]
             if best_match is not None and best_score >= 0.8:
                 matched_comnam = best_match
+                non_exact_match_count += 1
         output_row = dict(row)
         output_row['ExtractedCompanyName'] = extracted
         output_row['NormalizedCompanyName'] = normalized
@@ -194,6 +198,13 @@ with open(unmatched_output_path, 'w', newline='', encoding='utf-8') as unmatched
 # Print merge success rate
 if total_rows:
     success_rate = match_count / total_rows * 100
+    exact_match_percentage = exact_match_count / total_rows * 100
+    non_exact_match_percentage = non_exact_match_count / total_rows * 100
 else:
     success_rate = 0.0
+    exact_match_percentage = 0.0
+    non_exact_match_percentage = 0.0
 logger.info('Matched %d out of %d records (%.2f%% success rate).', match_count, total_rows, success_rate)
+logger.info('Exact matches: %d (%.2f%%), Non-exact matches: %d (%.2f%%)',
+            exact_match_count, exact_match_percentage,
+            non_exact_match_count, non_exact_match_percentage)
