@@ -1,15 +1,23 @@
 import csv
+import logging
 import unicodedata
 import re
 from difflib import SequenceMatcher
 from collections import defaultdict
 
+from tqdm import tqdm
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 # Load CRSP data
 crsp_rows = []
+logger.info('Loading CRSP data...')
 with open('Data/CRSPnames.csv', newline='', encoding='utf-8') as crsp_file:
     reader = csv.DictReader(crsp_file)
-    for row in reader:
+    for row in tqdm(reader, desc='CRSP rows', unit='row'):
         crsp_rows.append(row)
+logger.info('Loaded %d CRSP rows.', len(crsp_rows))
 
 # Helper functions for text processing
 def normalize_text(text):
@@ -75,7 +83,8 @@ first_char_index = defaultdict(list)
 token_index = defaultdict(list)
 all_candidates = []
 norm_tokens_map = {}
-for row in crsp_rows:
+logger.info('Building lookup structures for CRSP names...')
+for row in tqdm(crsp_rows, desc='Indexing CRSP names', unit='row'):
     comnam = row.get('COMNAM', '')
     norm = normalize_text(comnam)
     if not norm:
@@ -94,10 +103,11 @@ for row in crsp_rows:
 matched_rows = []
 match_count = 0
 total_rows = 0
+logger.info('Processing SE mappings for matching...')
 with open('Data/SEmappingsDAFA.csv', newline='', encoding='utf-8') as se_file:
     reader = csv.DictReader(se_file)
     fieldnames = reader.fieldnames
-    for row in reader:
+    for row in tqdm(reader, desc='Matching SE rows', unit='row'):
         total_rows += 1
         extracted = extract_company_from_headline(row.get('SEHeadline', ''), row.get('SECompanyName', ''))
         normalized = normalize_text(extracted)
@@ -152,6 +162,7 @@ with open('Data/SEmappingsDAFA.csv', newline='', encoding='utf-8') as se_file:
 
 # Write results to file
 output_path = 'Data/SEmappingsDAFA_merged.csv'
+logger.info('Writing merged results to %s', output_path)
 with open(output_path, 'w', newline='', encoding='utf-8') as out_file:
     writer = csv.DictWriter(out_file, fieldnames=fieldnames)
     writer.writeheader()
@@ -162,4 +173,4 @@ if total_rows:
     success_rate = match_count / total_rows * 100
 else:
     success_rate = 0.0
-print(f'Matched {match_count} out of {total_rows} records ({success_rate:.2f}% success rate).')
+logger.info('Matched %d out of %d records (%.2f%% success rate).', match_count, total_rows, success_rate)
